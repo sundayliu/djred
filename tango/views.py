@@ -3,6 +3,7 @@ from django.shortcuts import render_to_response
 from django.template import RequestContext
 from django.contrib.auth import authenticate, login,logout
 from django.http import HttpResponseRedirect, HttpResponse
+from datetime import datetime
 
 from django.contrib.auth.decorators import login_required
 
@@ -62,22 +63,36 @@ def index(request):
     #context_dict = {'boldmessage':"I am bold font from the context"}
     #return render_to_response("tango/index.html",context_dict,context)
     # Obtain the context from the HTTP request.
+    
     context = RequestContext(request)
 
-    # Query the database for a list of ALL categories currently stored.
-    # Order the categories by no. likes in descending order.
-    # Retrieve the top 5 only - or all if less than 5.
-    # Place the list in our context_dict dictionary which will be passed to the template engine.
-    category_list = Category.objects.order_by('-likes')[:5]
-    context_dict = {'categories': category_list}
-    
-    # The following two lines are new.
-    # We loop through each category returned, and create a URL attribute.
-    # This attribute stores an encoded URL (e.g. spaces replaced with underscores).
-    for category in category_list:
-        category.url = category.name.replace(' ', '_')
+    top_category_list = Category.objects.order_by('-likes')[:5]
 
-    # Render the response and send it back!
+    for category in top_category_list:
+        category.url = encode_url(category.name)
+
+    context_dict = {'categories': top_category_list}
+
+    cat_list = get_category_list()
+    context_dict['cat_list'] = cat_list
+
+    page_list = Page.objects.order_by('-views')[:5]
+    context_dict['pages'] = page_list
+
+    if request.session.get('last_visit'):
+    # The session has a value for the last visit
+        last_visit_time = request.session.get('last_visit')
+
+        visits = request.session.get('visits', 0)
+
+        if (datetime.now() - datetime.strptime(last_visit_time[:-7], "%Y-%m-%d %H:%M:%S")).days > 0:
+            request.session['visits'] = visits + 1
+    else:
+        # The get returns None, and the session does not have a value for the last visit.
+        request.session['last_visit'] = str(datetime.now())
+        request.session['visits'] = 1
+
+    # Render and return the rendered response back to the user.
     return render_to_response('tango/index.html', context_dict, context)
 
 def category(request, category_name_url):
@@ -184,6 +199,9 @@ def add_page(request, category_name_url):
              context)
     
 def register(request):
+    if request.session.test_cookie_worked():
+        print (">>>>>>TEST COOKIE WORKED")
+        request.session.delete_test_cookie()
     # Like before, get the request's context.
     context = RequestContext(request)
 
